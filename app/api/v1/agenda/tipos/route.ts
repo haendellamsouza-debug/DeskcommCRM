@@ -38,6 +38,7 @@ import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
+import { resolveAuthDual } from "@/lib/api/auth-dual";
 import { requireRole } from "@/lib/auth/require-role";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { listaTiposDeAtendimento } from "@/lib/agenda/consulta";
@@ -223,7 +224,12 @@ function slugDe(nome: string): string {
 
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = req.headers.get("x-request-id") ?? undefined;
-  const autorizado = await requireRole("viewer", { requestId, resource: "calendar_event_types" });
+  const autorizado = await resolveAuthDual(req, {
+    requestId: requestId ?? "agenda-types",
+    resource: "calendar_event_types",
+    role: "viewer",
+    scope: "mcp:read",
+  });
   if (!autorizado.ok) return autorizado.response;
 
   // A MESMA coleta que a ferramenta MCP usa. Esta query era inline aqui, e havia
@@ -232,9 +238,13 @@ export async function GET(req: NextRequest): Promise<Response> {
   //
   // `incluirInativos: true` porque quem chama esta rota administra o cadastro:
   // esconder o tipo desativado tiraria dele a única porta para reativá-lo.
-  const r = await listaTiposDeAtendimento(createAdminClient(), autorizado.org.orgId, {
+  const r = await listaTiposDeAtendimento(
+    autorizado.via === "token" ? autorizado.supabase : createAdminClient(),
+    autorizado.organizationId,
+    {
     incluirInativos: true,
-  });
+    },
+  );
   if (!r.ok) return fail("internal_error", r.motivoParaOperador, 500, { requestId });
   // O wire desta rota é snake_case e a tela já o consome assim; o coletor fala a
   // língua do domínio. A tradução é aqui, na borda, e não no coletor — que

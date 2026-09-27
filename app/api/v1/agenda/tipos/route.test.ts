@@ -34,9 +34,11 @@ import { fail } from "@/lib/api/wrappers";
 import { requireRole } from "@/lib/auth/require-role";
 import type { AuthUser } from "@/lib/auth/types";
 import { listaTiposDeAtendimento } from "@/lib/agenda/consulta";
+import { createClient } from "@/lib/supabase/server";
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
+vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/agenda/consulta", () => ({ listaTiposDeAtendimento: vi.fn() }));
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
@@ -168,6 +170,7 @@ async function corpoDeErro(res: Response) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(createClient).mockResolvedValue({ session: true } as never);
 });
 
 describe("POST /api/v1/agenda/tipos — o lembrete no nascimento do tipo", () => {

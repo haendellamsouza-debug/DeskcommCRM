@@ -15,11 +15,10 @@ import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 
 import { ok, fail } from "@/lib/api/wrappers";
-import { requireRole } from "@/lib/auth/require-role";
+import { resolveAuthDual } from "@/lib/api/auth-dual";
 import { isServiceRoleConfigured } from "@/lib/audit";
 import { PAPEL_MINIMO_DA_LISTA } from "@/lib/agenda/lista-de-pessoas";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
@@ -31,14 +30,20 @@ export interface PessoaDaAgenda {
 
 export async function GET(_req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
-  const authz = await requireRole(PAPEL_MINIMO_DA_LISTA, {
+  const authz = await resolveAuthDual(_req, {
     requestId,
     resource: "agenda",
+    role: PAPEL_MINIMO_DA_LISTA,
+    scope: "mcp:read",
   });
   if (!authz.ok) return authz.response;
-  const orgId = authz.org.orgId; // fonte confiável (cookie validado)
+  const orgId = authz.organizationId; // cookie ou linha do token, sempre fonte confiável
 
-  const client = isServiceRoleConfigured() ? createAdminClient() : await createClient();
+  const client = authz.via === "token"
+    ? authz.supabase
+    : isServiceRoleConfigured()
+      ? createAdminClient()
+      : authz.supabase;
   const { data: rows, error } = await client
     .from("user_organizations")
     .select("user_id, role")

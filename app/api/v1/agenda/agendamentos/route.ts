@@ -23,7 +23,6 @@ import { resolveAuthDual, tetoDeEscritaDoToken } from "@/lib/api/auth-dual";
 import type { Actor } from "@/lib/api/handlers/types";
 import { ApiError } from "@/lib/api/types";
 import { fail, ok } from "@/lib/api/wrappers";
-import { requireRole } from "@/lib/auth/require-role";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { IDIOMA_PADRAO } from "@/lib/i18n/idiomas";
 import { logger } from "@/lib/logger";
@@ -150,11 +149,18 @@ const cancelarSchema = z.object({
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
 
-  // `viewer`: olhar a agenda é o menor privilégio desta feature.
-  const authz = await requireRole("viewer", { requestId, resource: "agenda" });
+  // `viewer`: olhar a agenda é o menor privilégio desta feature. O mesmo GET
+  // aceita sessão de navegador ou Bearer `dsk_...`; a organização vem do
+  // cookie validado ou da linha do token, nunca da query.
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "agenda",
+    role: "viewer",
+    scope: "mcp:read",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const { org: activeOrg } = authz;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? IDIOMA_PADRAO);
+  const { organizationId, supabase } = authz;
 
   const url = new URL(req.url);
   const parsed = listarSchema.safeParse({
@@ -174,8 +180,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     });
   }
 
-  const supabase = await createClient();
-  const resultado = await listaAgendamentos(supabase, activeOrg.orgId, {
+  const resultado = await listaAgendamentos(supabase, organizationId, {
     contactId: parsed.data.contact_id ?? null,
     leadId: parsed.data.lead_id ?? null,
     ownerUserId: parsed.data.owner_user_id ?? null,
@@ -238,7 +243,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     // item 3). `organization_id` continua vindo do cookie validado; os donos são
     // membros DESSA organização, com filtro explícito (mesmo caminho de
     // `app/api/v1/agenda/pessoas/route.ts`).
-    const { donos, erro: erroDosDonos } = await donosDaAgenda(activeOrg.orgId);
+    const { donos, erro: erroDosDonos } = await donosDaAgenda(organizationId);
     if (erroDosDonos) {
       logger.warn("[agenda.agendamentos] donos da agenda não vieram", {
         erro: erroDosDonos,
@@ -249,7 +254,7 @@ export async function GET(req: NextRequest): Promise<Response> {
     const { blocos, erro } = await lerOcupacaoExterna(
       supabase,
       {
-        organizationId: activeOrg.orgId,
+        organizationId,
         de: parsed.data.de,
         ate: parsed.data.ate,
       },

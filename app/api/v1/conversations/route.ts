@@ -6,10 +6,9 @@ import { type NextRequest } from "next/server";
 
 import { ApiError } from "@/lib/api/types";
 import { fail, ok } from "@/lib/api/wrappers";
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { resolveAuthDual } from "@/lib/api/auth-dual";
 import { traduzir } from "@/lib/i18n/dicionario";
 import { listConversationsQuerySchema } from "@/lib/schemas";
-import { createClient } from "@/lib/supabase/server";
 import { comNomeDoAtendente } from "@/lib/users/com-nome-do-atendente";
 
 import { listConversationsHandler } from "./_handler";
@@ -18,22 +17,15 @@ export const dynamic = "force-dynamic";
 
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
-  const supabase = await createClient();
-
-  const {
-    data: { user },
-    error: authErr,
-  } = await supabase.auth.getUser();
-  if (authErr || !user) {
-    return fail("unauthenticated", "Auth required.", 401, { requestId });
-  }
-
-  const authUser = await loadAuthUser();
-  const t = (texto: string) => traduzir(texto, authUser?.idioma ?? "pt-BR");
-  const activeOrg = authUser ? await resolveActiveOrg(authUser) : null;
-  if (!activeOrg) {
-    return fail("no_active_org", t("No active organization."), 403, { requestId });
-  }
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "conversations",
+    role: "viewer",
+    scope: "mcp:read",
+  });
+  if (!authz.ok) return authz.response;
+  const { organizationId, actor, idioma, supabase } = authz;
+  const t = (texto: string) => traduzir(texto, idioma ?? "pt-BR");
 
   const url = new URL(req.url);
   const qsParsed = listConversationsQuerySchema.safeParse({
@@ -72,10 +64,10 @@ export async function GET(req: NextRequest): Promise<Response> {
     const { conversations, cursor, has_more } = await listConversationsHandler(
       supabase,
       {
-        organization_id: activeOrg.orgId,
-        actor: { type: "user", id: user.id },
+        organization_id: organizationId,
+        actor,
         requestId,
-        idioma: authUser?.idioma,
+        idioma,
       },
       qsParsed.data,
     );

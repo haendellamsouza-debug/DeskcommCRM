@@ -42,9 +42,8 @@ import {
   MAXIMO_DE_DIAS,
   type CodigoDeRecusaDaConsulta,
 } from "@/lib/agenda/consulta";
+import { resolveAuthDual } from "@/lib/api/auth-dual";
 import { fail, ok } from "@/lib/api/wrappers";
-import { requireRole } from "@/lib/auth/require-role";
-import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 const querySchema = z.object({
@@ -57,10 +56,14 @@ const querySchema = z.object({
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
 
-  const authz = await requireRole("viewer", { requestId, resource: "agenda" });
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "agenda",
+    role: "viewer",
+    scope: "mcp:read",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const { org: activeOrg } = authz;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? "pt-BR");
 
   const url = new URL(req.url);
   const parsed = querySchema.safeParse({
@@ -89,12 +92,10 @@ export async function GET(req: NextRequest): Promise<Response> {
     });
   }
 
-  const supabase = await createClient();
-
   // O miolo mora em `lib/agenda/consulta.ts` porque as ferramentas MCP precisam
   // do MESMO cálculo sem ter request nem cookie. Duas coletas dariam à IA e à
   // tela respostas diferentes sobre o mesmo horário.
-  const consulta = await horariosLivresDaOrg(supabase, activeOrg.orgId, {
+  const consulta = await horariosLivresDaOrg(authz.supabase, authz.organizationId, {
     eventTypeId: parsed.data.event_type_id,
     eventTypeSlug: null,
     ownerUserId: parsed.data.owner_user_id ?? null,
@@ -144,4 +145,3 @@ export async function GET(req: NextRequest): Promise<Response> {
     { requestId },
   );
 }
-

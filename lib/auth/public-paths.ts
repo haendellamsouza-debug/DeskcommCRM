@@ -82,6 +82,11 @@ export const PUBLIC_PATHS: RegExp[] = [
   // `GET` da listagem, não `/api/v1/contacts/[id]` nem `/import`, que ainda
   // não têm suporte a Bearer.
   /^\/api\/v1\/contacts$/,
+  // LEITURA SERVER-TO-SERVER. Inbox e Agenda aceitam sessão de navegador ou
+  // Bearer `dsk_...` com `mcp:read`; o handler ainda valida token, papel,
+  // escopo e organização antes de consultar qualquer dado.
+  /^\/api\/v1\/conversations$/,
+  /^\/api\/v1\/agenda\/(agendamentos|tipos|pessoas|configuracao|horarios-livres)$/,
   // ENVIO SERVER-TO-SERVER. Mesma dualidade de `/api/v1/contacts` acima, com
   // `mcp:write` em vez de `mcp:read`: sessão de navegador OU Bearer `dsk_…`,
   // resolvidos por `lib/api/auth-dual.ts` DENTRO de cada rota, com a org saindo
@@ -105,9 +110,8 @@ export const PUBLIC_PATHS: RegExp[] = [
   // MARCAR/REMARCAR/CANCELAR COMPROMISSO SERVER-TO-SERVER. Mesma dualidade dos
   // dois de cima: sessão OU Bearer `dsk_…`, resolvidos por `lib/api/auth-dual.ts`
   // DENTRO da rota (`app/api/v1/agenda/agendamentos/route.ts`, função
-  // `despachar`). `GET` (listar) segue só-sessão — este path cobre os quatro
-  // verbos porque o proxy filtra por PATH, não por método; quem decide o
-  // método é a própria rota, como sempre foi.
+  // `despachar`). Este path cobre todos os verbos porque o proxy filtra por
+  // PATH, não por método; quem decide o método é a própria rota.
   /^\/api\/v1\/agenda\/agendamentos$/,
   /^\/api\/v1\/conversations\/open-with-contact$/,
   // Upload outbound: primeiro passo do envio de MÍDIA por token. Sem ele, o
