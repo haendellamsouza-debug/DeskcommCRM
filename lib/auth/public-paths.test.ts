@@ -87,4 +87,12 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/api/v1/channel-sessions/not-a-uuid")).toBe(false);
     expect(isPublicPath("/api/v1/channel-sessions/11111111-1111-4111-8111-111111111111/qr/extra")).toBe(false);
   });
+
+  it("libera somente os GETs operacionais de IA suportados por Bearer", () => {
+    expect(isPublicPath("/api/v1/ai/agents")).toBe(true);
+    expect(isPublicPath("/api/v1/ai/runs")).toBe(true);
+    expect(isPublicPath("/api/v1/ai/providers")).toBe(true);
+    expect(isPublicPath("/api/v1/ai/agents/abc")).toBe(false);
+    expect(isPublicPath("/api/v1/ai/providers/models")).toBe(false);
+  });
 });

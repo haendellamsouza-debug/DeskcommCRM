@@ -8,17 +8,17 @@
  * porque é assim que o operador pensa depois de configurar o painel: "troquei o
  * modelo do classificador de estágio, está funcionando?".
  */
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { NextRequest } from "next/server";
 
 import { fail, ok } from "@/lib/api/wrappers";
-import { requireRole } from "@/lib/auth/require-role";
+import { resolveAuthDual } from "@/lib/api/auth-dual";
 import { PROVEDOR_DO_JEV } from "@/lib/ai/decisao/credencial";
 import { JEV_FALHOU_SEM_RESERVA, O_QUE_FAZER_DO_JEV } from "@/lib/ai/decisao/textos";
 import { rotuloDoProvedor } from "@/lib/ai/pontos/provedores";
 import { PONTO_POR_ID } from "@/lib/ai/pontos/registro";
 import { EXPLICACAO_DA_ORIGEM, type OrigemDaEscolha } from "@/lib/ai/pontos/resolver";
-import { createClient } from "@/lib/supabase/server";
 import { traduzir } from "@/lib/i18n/dicionario";
 
 export const dynamic = "force-dynamic";
@@ -85,10 +85,15 @@ const filtrosDaQuery = z.object({
 });
 
 export async function GET(req: NextRequest): Promise<Response> {
-  const authz = await requireRole("manager", { resource: "ai_runs" });
+  const requestId = randomUUID();
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "ai_runs",
+    role: "manager",
+    scope: "mcp:read",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const { org } = authz;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? "pt-BR");
 
   // Zod na query string, como a rota irmã de uso já faz. `Math.min(Number(…))`
   // não valida nada: `?limit=abc` virava `NaN` e `?limit=-5` passava direto,
@@ -100,13 +105,13 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
   const { purpose, status, provider, limit: limite } = filtros.data;
 
-  const db = await createClient();
+  const db = authz.supabase;
   let q = db
     .from("llm_calls")
     .select(
       "id, purpose, provider, model, status, error_code, error_message, http_status, origem_da_escolha, input_tokens, output_tokens, cost_cents, latency_ms, created_at",
     )
-    .eq("organization_id", org.orgId)
+    .eq("organization_id", authz.organizationId)
     .order("created_at", { ascending: false })
     .limit(limite);
 
@@ -122,7 +127,7 @@ export async function GET(req: NextRequest): Promise<Response> {
   }
 
   const { data, error } = await q;
-  if (error) return fail("query_failed", error.message, 500);
+  if (error) return fail("query_failed", error.message, 500, { requestId });
 
   const execucoes = ((data ?? []) as LinhaDeExecucao[]).map((l) => {
     const ponto = PONTO_POR_ID.get(l.purpose);
@@ -172,5 +177,5 @@ export async function GET(req: NextRequest): Promise<Response> {
         oQueFazer: O_QUE_FAZER[codigo] ?? null,
       })),
     },
-  });
+  }, { requestId });
 }

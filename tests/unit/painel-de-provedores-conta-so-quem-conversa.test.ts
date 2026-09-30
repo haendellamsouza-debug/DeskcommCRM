@@ -11,8 +11,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { requireRole } from "@/lib/auth/require-role";
 
 const banco = vi.hoisted(() => ({ credenciais: [] as Array<Record<string, unknown>> }));
+const authDual = vi.hoisted(() => ({ resolveAuthDual: vi.fn() }));
 
 vi.mock("@/lib/auth/require-role", () => ({ requireRole: vi.fn() }));
+vi.mock("@/lib/api/auth-dual", () => authDual);
 vi.mock("@/lib/impersonate/support", () => ({ requireSupportWrite: vi.fn(async () => null) }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
 vi.mock("@/lib/supabase/admin", () => ({ createAdminClient: vi.fn() }));
@@ -32,13 +34,14 @@ vi.mock("@/lib/supabase/server", () => ({
 }));
 
 import { GET } from "@/app/api/v1/ai/providers/route";
+import { resolveAuthDual } from "@/lib/api/auth-dual";
 
 function linha(provider: string) {
   return { id: `cred-${provider}`, provider, label: provider, api_key_last4: "c0de", validated_at: "2026-09-23T12:00:00Z", is_active: true };
 }
 
 async function credenciaisDoPainel(): Promise<string[]> {
-  const res = await GET();
+  const res = await GET(new Request("http://localhost/api/v1/ai/providers") as never);
   expect(res.status).toBe(200);
   const corpo = (await res.json()) as { data: { credenciais: Array<{ provider: string }> } };
   return corpo.data.credenciais.map((c) => c.provider);
@@ -46,6 +49,26 @@ async function credenciaisDoPainel(): Promise<string[]> {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  vi.mocked(resolveAuthDual).mockResolvedValue({
+    ok: true,
+    organizationId: "11111111-1111-4111-8111-111111111111",
+    role: "admin",
+    actor: { type: "user", id: "actor" },
+    idioma: "pt-BR",
+    via: "session",
+    supabase: {
+      from: (tabela: string) => {
+        const dados = tabela === "ai_provider_credentials" ? banco.credenciais : [];
+        const chain: Record<string, unknown> = {
+          maybeSingle: async () => ({ data: null, error: null }),
+          then: (ok: (v: unknown) => unknown, erro: (e: unknown) => unknown) =>
+            Promise.resolve({ data: dados, error: null }).then(ok, erro),
+        };
+        for (const m of ["select", "eq", "is", "not", "order", "limit"]) chain[m] = () => chain;
+        return chain;
+      },
+    },
+  } as never);
   vi.mocked(requireRole).mockResolvedValue({
     ok: true,
     user: { id: "actor", idioma: "pt-BR" },

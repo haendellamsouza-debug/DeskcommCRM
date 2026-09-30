@@ -11,14 +11,15 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  *                              agent kind='mcp_agent' + ai_agent_versions v1 draft
  *                              numa sequência ordenada (rollback se versão falhar).
  *
- * Auth: cookie session. organization_id resolvido do JWT — nunca do body.
+ * Auth do GET: cookie de sessão ou Bearer `dsk_...` com `mcp:read` e papel
+ * manager+. A organização vem da identidade resolvida, nunca do body.
  */
 import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 import { ok, fail } from "@/lib/api/wrappers";
+import { resolveAuthDual } from "@/lib/api/auth-dual";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { mcpAgentDraftRecords } from "@/lib/ai/agents/create-draft";
 import { mensagemDoEscopo, validarEscopoDaVersao } from "@/lib/ai/agents/escopo";
@@ -57,17 +58,21 @@ const VERSION_COLUMNS =
 export async function GET(req: NextRequest): Promise<Response> {
   const requestId = randomUUID();
 
-  const authz = await requireRole("manager", { requestId, resource: "ai_agents" });
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "ai_agents",
+    role: "manager",
+    scope: "mcp:read",
+  });
   if (!authz.ok) return authz.response;
-  const { org: activeOrg } = authz;
 
   const includeArchived = req.nextUrl.searchParams.get("include_archived") === "true";
 
-  const supabase = await createClient();
+  const supabase = authz.supabase;
   let query = supabase
     .from("ai_agents")
     .select(AGENT_COLUMNS_COM_VERSAO)
-    .eq("organization_id", activeOrg.orgId);
+    .eq("organization_id", authz.organizationId);
 
   if (!includeArchived) {
     query = query.is("archived_at", null);

@@ -93,6 +93,10 @@ export const PUBLIC_PATHS: RegExp[] = [
   /^\/api\/v1\/channel-sessions$/,
   /^\/api\/v1\/channel-sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
   /^\/api\/v1\/channel-sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/qr$/i,
+  // Leitura operacional de IA: cookie de sessão ou Bearer `dsk_...` com
+  // `mcp:read` e papel manager+. As próprias rotas mantêm o guard; esta lista
+  // apenas impede o proxy de bloquear o Bearer antes do handler.
+  /^\/api\/v1\/ai\/(agents|runs|providers)$/,
   // ENVIO SERVER-TO-SERVER. Mesma dualidade de `/api/v1/contacts` acima, com
   // `mcp:write` em vez de `mcp:read`: sessão de navegador OU Bearer `dsk_…`,
   // resolvidos por `lib/api/auth-dual.ts` DENTRO de cada rota, com a org saindo

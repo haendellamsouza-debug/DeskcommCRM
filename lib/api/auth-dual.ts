@@ -48,6 +48,8 @@ export type AuthDual =
   | {
       ok: true;
       organizationId: string;
+      /** Papel efetivo; opcional apenas para compatibilidade com mocks legados. */
+      role?: Role;
       actor: Actor;
       supabase: SupabaseClient;
       idioma?: Idioma;
@@ -119,6 +121,7 @@ export async function resolveAuthDual(
     return {
       ok: true,
       organizationId: auth.organizationId,
+      role: auth.role,
       actor: auth.actor,
       supabase: createAdminClient(),
       via: "token",
@@ -130,6 +133,7 @@ export async function resolveAuthDual(
   return {
     ok: true,
     organizationId: authz.org.orgId,
+    role: authz.org.role,
     actor: { type: "user", id: authz.user.id },
     supabase: await createClient(),
     idioma: authz.user.idioma,

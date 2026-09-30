@@ -12,11 +12,13 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * recusar naquele instante trocaria uma configuração ruim por um atendimento
  * perdido.
  */
+import { randomUUID } from "node:crypto";
 import { enxergaImagem } from "@/lib/ai/pontos/capacidade-em-vigor";
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 
 import { fail, ok } from "@/lib/api/wrappers";
+import { resolveAuthDual } from "@/lib/api/auth-dual";
 import { audit } from "@/lib/audit";
 import { requireRole } from "@/lib/auth/require-role";
 import { roleAtLeast } from "@/lib/auth/types";
@@ -48,23 +50,28 @@ interface ModeloDoCatalogo {
   context_window: number | null;
 }
 
-export async function GET(): Promise<Response> {
-  const authz = await requireRole("manager", { resource: "ai_providers" });
+export async function GET(req: NextRequest): Promise<Response> {
+  const requestId = randomUUID();
+  const authz = await resolveAuthDual(req, {
+    requestId,
+    resource: "ai_providers",
+    role: "manager",
+    scope: "mcp:read",
+  });
   if (!authz.ok) return authz.response;
-  const t = (texto: string) => traduzir(texto, authz.user.idioma);
-  const { org } = authz;
+  const t = (texto: string) => traduzir(texto, authz.idioma ?? "pt-BR");
 
-  const db = await createClient();
+  const db = authz.supabase;
 
   const [bindingsRes, credsRes, modelosRes, orgRes, agenteRes] = await Promise.all([
     db
       .from("ai_purpose_bindings")
       .select("purpose, provider, credential_id, model_id, base_url, is_enabled")
-      .eq("organization_id", org.orgId),
+      .eq("organization_id", authz.organizationId),
     db
       .from("ai_provider_credentials")
       .select("id, provider, label, api_key_last4, validated_at, is_active")
-      .eq("organization_id", org.orgId)
+      .eq("organization_id", authz.organizationId)
       .eq("is_active", true),
     db
       .from("ai_models")
@@ -74,13 +81,13 @@ export async function GET(): Promise<Response> {
       .is("deprecated_at", null)
       .order("provider")
       .order("display_name"),
-    db.from("organizations").select("settings").eq("id", org.orgId).maybeSingle(),
+    db.from("organizations").select("settings").eq("id", authz.organizationId).maybeSingle(),
     db
       .from("ai_agents")
       .select(
         "id, name, published_version_id, versao:ai_agent_versions!ai_agents_published_version_id_fkey(provider, model, credential_id)",
       )
-      .eq("organization_id", org.orgId)
+      .eq("organization_id", authz.organizationId)
       .is("archived_at", null)
       .not("published_version_id", "is", null)
       .limit(1)
@@ -204,7 +211,7 @@ export async function GET(): Promise<Response> {
     // `app/app/ai/credentials/page.tsx`.
     instalacaoTemChave: instalacaoTemChaveDeIa(),
     modelos,
-    podeEditar: roleAtLeast(org.role, "admin"),
+    podeEditar: roleAtLeast(authz.role ?? "viewer", "admin"),
   });
 }
 
