@@ -72,14 +72,19 @@ describe("isPublicPath", () => {
     expect(isPublicPath("/api/v1/leads/11111111-1111-4111-8111-111111111111/clone")).toBe(false);
   });
 
-  it("libera somente as leituras server-to-server do Inbox e da Agenda", () => {
+  it("libera somente as leituras server-to-server do Inbox, Agenda e Conexões", () => {
     expect(isPublicPath("/api/v1/conversations")).toBe(true);
     expect(isPublicPath("/api/v1/agenda/agendamentos")).toBe(true);
     expect(isPublicPath("/api/v1/agenda/tipos")).toBe(true);
     expect(isPublicPath("/api/v1/agenda/pessoas")).toBe(true);
     expect(isPublicPath("/api/v1/agenda/configuracao")).toBe(true);
     expect(isPublicPath("/api/v1/agenda/horarios-livres")).toBe(true);
+    expect(isPublicPath("/api/v1/channel-sessions")).toBe(true);
+    expect(isPublicPath("/api/v1/channel-sessions/11111111-1111-4111-8111-111111111111")).toBe(true);
+    expect(isPublicPath("/api/v1/channel-sessions/11111111-1111-4111-8111-111111111111/qr")).toBe(true);
     expect(isPublicPath("/api/v1/conversations/alguma-conversa")).toBe(false);
     expect(isPublicPath("/api/v1/agenda/tipos/reativar")).toBe(false);
+    expect(isPublicPath("/api/v1/channel-sessions/not-a-uuid")).toBe(false);
+    expect(isPublicPath("/api/v1/channel-sessions/11111111-1111-4111-8111-111111111111/qr/extra")).toBe(false);
   });
 });

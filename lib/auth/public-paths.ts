@@ -87,6 +87,12 @@ export const PUBLIC_PATHS: RegExp[] = [
   // escopo e organização antes de consultar qualquer dado.
   /^\/api\/v1\/conversations$/,
   /^\/api\/v1\/agenda\/(agendamentos|tipos|pessoas|configuracao|horarios-livres)$/,
+  // Conexões: listagem e health/QR aceitam sessão de navegador ou Bearer
+  // `dsk_...` com `mcp:read`; criação continua exigindo `mcp:write` + admin
+  // dentro do handler. A organização vem do token, nunca do path/body.
+  /^\/api\/v1\/channel-sessions$/,
+  /^\/api\/v1\/channel-sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+  /^\/api\/v1\/channel-sessions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/qr$/i,
   // ENVIO SERVER-TO-SERVER. Mesma dualidade de `/api/v1/contacts` acima, com
   // `mcp:write` em vez de `mcp:read`: sessão de navegador OU Bearer `dsk_…`,
   // resolvidos por `lib/api/auth-dual.ts` DENTRO de cada rota, com a org saindo

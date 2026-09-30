@@ -22,32 +22,30 @@ import { requireSupportWrite } from "@/lib/impersonate/support";
  * a mostrar), e o `null` seguia para a URL como se fosse nome de sessão.
  */
 import { NextResponse } from "next/server";
+import { randomUUID } from "node:crypto";
 
-import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
+import { resolveAuthDual } from "@/lib/api/auth-dual";
 import { ARCHIVED_AT, queryTolerantToMissingArchived } from "@/lib/channels/archived";
-import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ): Promise<Response> {
   const supportDenied = await requireSupportWrite();
   if (supportDenied) return supportDenied;
   const { id } = await params;
 
-  const user = await loadAuthUser();
-  if (!user) return new NextResponse(null, { status: 401 });
-  const activeOrg = await resolveActiveOrg(user);
-  if (!activeOrg) return new NextResponse(null, { status: 403 });
+  const authz = await resolveAuthDual(req as import("next/server").NextRequest, { requestId: randomUUID(), resource: "channel_sessions", role: "viewer", tokenRole: "viewer", scope: "mcp:read" });
+  if (!authz.ok) return authz.response;
 
-  const supabase = await createClient();
+  const supabase = authz.supabase;
   const buscar = (colunas: string) =>
     supabase
       .from("channel_sessions")
       .select(colunas)
-      .eq("organization_id", activeOrg.orgId)
+      .eq("organization_id", authz.organizationId)
       .eq("id", id)
       .maybeSingle();
   // Tolerante à coluna ausente: num clone sem a migration 0106 nada está
